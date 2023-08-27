@@ -6,6 +6,8 @@ import tweetRoutes from './routes/tweetRoutes'
 app.use(express.json())
 
 app.get('/', (req,res)=>{
+    
+    
     res.send("Twitter Backend Updated Again")
 })
 
