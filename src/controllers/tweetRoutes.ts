@@ -1,4 +1,6 @@
 import { Request, Response } from 'express';
+import { PrismaClient } from '@prisma/client';
+
 
 
 const tweets =async (req: Request, res: Response) => {
@@ -20,6 +22,9 @@ const updateTweet = async (req: Request, res: Response)=>{
 const deleteTweet = async (req: Request, res: Response)=>{
     res.send('delete created')
 }
+
+
+// gigigig
 
 // export default {
 //     singleUser,
