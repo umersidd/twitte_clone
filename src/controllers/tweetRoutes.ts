@@ -19,6 +19,8 @@ const updateTweet = async (req: Request, res: Response)=>{
     res.send('update created')
 }
 
+//B MEIN  N
+
 const deleteTweet = async (req: Request, res: Response)=>{
     res.send('delete created')
 }
