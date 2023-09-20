@@ -14,7 +14,7 @@ const singleTweet = async(req: Request, res: Response)=>{
 const createTweet = async(req: Request, res: Response)=>{
     res.send('user created')
 }
-
+// dfdfdf
 const updateTweet = async (req: Request, res: Response)=>{
     res.send('update created')
 }
