@@ -11,7 +11,7 @@ app.get('/', (req,res)=>{
     res.send("Twitter Backend Updated Again")
 })
 
-console.log(arguments)
+// console.log(arguments)
 
 app.use('/user', userRoutes)
 app.use('/tweet', tweetRoutes)
