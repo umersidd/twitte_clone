@@ -12,7 +12,7 @@ app.get('/', (req,res)=>{
 })
 
 // console.log(arguments)
-
+// ssds
 app.use('/user', userRoutes)
 app.use('/tweet', tweetRoutes)
 
