@@ -3,7 +3,7 @@ const router = Router();
 // const {
 //     authenticateUser,
 //     authorizePermissions,
-//   } = require('../middleware/authentication');
+//   } = require('../middleware/authentication'); //ok
 
 const { tweets,
     singleTweet,
