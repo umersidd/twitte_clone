@@ -10,7 +10,7 @@ const { tweets,
     updateTweet,
     createTweet,
     deleteTweet} = require('../controllers/tweetRoutes')
-//adi un
+//adi unkcnsd d
 
 
 router.route('/:id').get(singleTweet)
