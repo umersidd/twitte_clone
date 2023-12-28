@@ -1,0 +1,615 @@
+#include <Arduino.h>
+#ifdef ESP32
+#include <WiFi.h>
+#include <AsyncTCP.h> // for esp32
+#else
+//#include <ESP8266WiFi.h> // for esp8266
+//#include <ESPAsyncTCP.h> // for esp8266
+#endif
+#include <ESPAsyncWebServer.h> //vfor esp32
+
+AsyncWebServer server(80);
+#include "secrets.h"
+#include <WiFiClientSecure.h>
+#include <PubSubClient.h>
+#include <ArduinoJson.h>
+#include "WiFi.h"
+#include "DHT.h"
+#include <TinyGPS++.h>
+#include <HardwareSerial.h>
+#include <SPI.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+HardwareSerial ss(1); // use UART1
+#define DHTPIN 4     // Digital pin connected to the DHT sensor
+#define DHTTYPE DHT11   // DHT 11
+#define RXp2 16
+#define TXp2 17
+const int lamp = 2;
+const int buzzer = 18;
+const int button_for_IP = 19;
+
+#define AWS_IOT_PUBLISH_TOPIC   "esp32/pub"   //topic for publish
+#define AWS_IOT_SUBSCRIBE_TOPIC "esp32/sub"   //topic for subscribe
+#define AWS_IOT_PUBLISH_TOPIC_ALERT   "esp32/alert"
+
+float h ;
+float t;
+char c;
+String dataIn;
+String gpsData = "";
+int8_t indexOfA, indexOfB, indexOfC, indexOfD, indexOfE;
+String data1, data2, data3, data4, data5;
+String names = "Hello World";
+unsigned long previousMillis = 0;  // Stores the last time the action was performed
+const unsigned long interval = 300000;  // 5 minutes in milliseconds
+int i = 0;
+
+int t_Oled;
+int h_Oled;
+IPAddress myIP;
+unsigned long previousMillis1 = 0;  // will store last time LED was updated
+const long interval1 = 5000; // interval at which to blink (milliseconds)
+int ledState = LOW;
+int mq07Threshold = 900;
+int mq135Threshold = 500;
+int mq02Threshold = 500;
+
+DHT dht(DHTPIN, DHTTYPE);
+TinyGPSPlus gps;
+
+WiFiClientSecure net = WiFiClientSecure();
+PubSubClient client(net);
+
+const char* PARAM_INPUT_1 = "input1";
+const char* PARAM_INPUT_2 = "input2";
+const char* PARAM_INPUT_3 = "input3";
+String temp_value = "";
+String humidity_value = "";
+int setpoint_humidity;
+int setpoint_temp;
+
+
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+
+#define OLED_RESET     -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+#define NUMFLAKES 10
+
+#define bitmap_height   128
+#define bitmap_width    64
+static const unsigned char PROGMEM logo_bmp[] =
+{ 0x00, 0x00, 0x00, 0x00, 0xFF, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x3F, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x1F, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x0F, 0x8F, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x08, 0x0F, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x08, 0x0F, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x08, 0x0F, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x78, 0x0F, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x08, 0x0F, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x80, 0x08, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x01, 0x80, 0x78, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x01, 0x80, 0x08, 0x03, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x01, 0xC0, 0x08, 0x0F, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x01, 0xC0, 0x78, 0x03, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x01, 0xC0, 0x78, 0x07, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x03, 0xC0, 0x08, 0x0F, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x03, 0xE0, 0x08, 0x03, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x07, 0xE0, 0x78, 0x0F, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x07, 0xF0, 0x08, 0x03, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x0F, 0xF0, 0x08, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x0F, 0xF8, 0x78, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x1F, 0xF8, 0x08, 0x03, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x1F, 0xF8, 0x08, 0x0F, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x3F, 0xFC, 0x78, 0x03, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x3F, 0xFE, 0x08, 0x03, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x7F, 0xFE, 0x0F, 0x8F, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x7F, 0xFF, 0x7F, 0x83, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0xFF, 0xFF, 0x0F, 0x83, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0xFF, 0xFF, 0x0F, 0x83, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x01, 0xFF, 0xFF, 0x7F, 0x80, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x03, 0xFF, 0xFF, 0x0F, 0x8F, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x03, 0xFF, 0xFF, 0x0F, 0x87, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x03, 0xFF, 0xFF, 0x1F, 0x8F, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x07, 0xFF, 0xFF, 0x7F, 0x83, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x0F, 0xFF, 0xFF, 0x0F, 0x83, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x0F, 0xFF, 0xFF, 0x0F, 0x8F, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x1F, 0xFF, 0xFF, 0x7F, 0x83, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x1F, 0xFF, 0xFF, 0x0F, 0x8F, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x1F, 0x0F, 0xF3, 0xEF, 0x83, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x3E, 0x03, 0xE7, 0xCF, 0xC0, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x3C, 0x61, 0xC7, 0x9F, 0xE0, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x7C, 0x71, 0xCF, 0xBF, 0xE3, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x7C, 0x71, 0xCF, 0xBF, 0xF3, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x7C, 0x71, 0x9F, 0xBF, 0xE3, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0xFC, 0x71, 0x3F, 0xBF, 0xE3, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0xFC, 0x71, 0x38, 0x1F, 0xE7, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0xFC, 0x02, 0x20, 0x0F, 0x87, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0xFE, 0x06, 0x46, 0x03, 0x0F, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0xFF, 0x8C, 0xC7, 0x18, 0x1F, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0xFF, 0xFC, 0xC7, 0x1C, 0x7F, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0xFF, 0xF9, 0xC7, 0x1C, 0x7F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0xFF, 0xF9, 0xC7, 0x1E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x7F, 0xF3, 0xC6, 0x1F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x7F, 0xE3, 0xC0, 0x3E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x7F, 0xE7, 0xE0, 0x7E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x3F, 0xFF, 0xFF, 0xFC, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x1F, 0xFF, 0xFF, 0xFC, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x1F, 0xFF, 0xFF, 0xF8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x0F, 0xFF, 0xFF, 0xF0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x07, 0xFF, 0xFF, 0xE0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x03, 0xFF, 0xFF, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x7F, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x1F, 0xFC, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x03, 0xE0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+#include <Fonts/FreeMonoBold18pt7b.h>
+#include <Fonts/FreeSans9pt7b.h>
+////////// variables
+// HTML web page to handle 3 input fields (input1, input2, input3)
+const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML><html><head>
+  <title>ESP Input Form</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  </head><body>
+  <form action="/get">
+    temperatureSetpoint: <input type="text" name="input1">
+    <input type="submit" value="Submit">
+  </form><br>
+  <form action="/get">
+    humiditySetpoint: <input type="text" name="input2">
+    <input type="submit" value="Submit">
+  </form>
+</body></html>)rawliteral";
+
+void notFound(AsyncWebServerRequest *request) {
+  request->send(404, "text/plain", "Not found");
+}
+
+
+void connectAWS()
+{
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  Serial.println("Connecting to Wi-Fi");
+
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println();
+  Serial.print("IP Address: ");
+  myIP = WiFi.localIP();
+  Serial.println(myIP);
+
+  // Configure WiFiClientSecure to use the AWS IoT device credentials
+  net.setCACert(AWS_CERT_CA);
+  net.setCertificate(AWS_CERT_CRT);
+  net.setPrivateKey(AWS_CERT_PRIVATE);
+
+  // Connect to the MQTT broker on the AWS endpoint we defined earlier
+  client.setServer(AWS_IOT_ENDPOINT, 8883);
+  // a3f0fflyuojaau-ats.iot.us-east-2.amazonaws.com:8883/esp32/pub
+
+  // Create a message handler
+  client.setCallback(messageHandler);
+
+  Serial.println("Connecting to AWS IOT");
+
+  while (!client.connect(THINGNAME))
+  {
+    Serial.print(".");
+    delay(100);
+  }
+
+  if (!client.connected())
+  {
+    Serial.println("AWS IoT Timeout!");
+    return;
+  }
+
+  // Subscribe to a topic
+  client.subscribe(AWS_IOT_SUBSCRIBE_TOPIC);
+
+  Serial.println("AWS IoT Connected!");
+}
+
+void publishMessage()
+{
+  StaticJsonDocument<200> doc;
+  int mq135 = data1.toInt();
+  int mq7 = data2.toInt();
+  int mq2 = data3.toInt();
+  doc["hum"] = h;
+  doc["temperature"] = t;
+  doc["mqOne"] = mq135;
+  doc["mqSeven"] = mq7;
+  doc["mqTwo"] = mq2;
+  doc["gpsData"] = gpsData;
+  char jsonBuffer[512];
+  serializeJson(doc, jsonBuffer); // print to client
+
+  client.publish(AWS_IOT_PUBLISH_TOPIC, jsonBuffer);
+  //  client.publish('topic', 'data')
+}
+
+void publishMessage1()
+{
+  Serial.println("alert");
+  StaticJsonDocument<200> doc;
+  doc["humidity"] = h;
+  doc["temperature"] = t;
+  doc["mq135"] = data1;
+  doc["mq7"] = data2;
+  doc["mq2"] = data3;
+  char jsonBuffer[512];
+  serializeJson(doc, jsonBuffer); // print to client
+
+  client.publish(AWS_IOT_PUBLISH_TOPIC_ALERT, jsonBuffer);
+}
+
+void messageHandler(char* topic, byte* payload, unsigned int length)
+{
+  Serial.print("incoming: ");
+  Serial.println(topic);
+
+  StaticJsonDocument<200> doc;
+  deserializeJson(doc, payload);
+  const char* message = doc["message"];
+  Serial.println(message);
+}
+
+void setup()
+{
+  Serial.begin(115200);
+  Serial.println(F("DHTxx test!"));
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+  ss.begin(9600, SERIAL_8N1, 32, 33);
+  Serial2.begin(9600, SERIAL_8N1, RXp2, TXp2);
+  connectAWS();
+  dht.begin();
+  // Send web page with input fields to client
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
+    request->send_P(200, "text/html", index_html);
+  });
+
+  // Send a GET request to <ESP_IP>/get?input1=<inputMessage>
+  server.on("/get", HTTP_GET, [] (AsyncWebServerRequest * request) {
+    String inputMessage;
+    String inputParam;
+    // GET input1 value on <ESP_IP>/get?input1=<inputMessage>
+    if (request->hasParam(PARAM_INPUT_1)) {
+      inputMessage = request->getParam(PARAM_INPUT_1)->value();
+      temp_value = inputMessage;
+      inputParam = PARAM_INPUT_1;
+    }
+    // GET input2 value on <ESP_IP>/get?input2=<inputMessage>
+    else if (request->hasParam(PARAM_INPUT_2)) {
+      inputMessage = request->getParam(PARAM_INPUT_2)->value();
+      humidity_value = inputMessage;
+      inputParam = PARAM_INPUT_2;
+    }
+    else {
+      inputMessage = "No message sent";
+      inputParam = "none";
+    }
+    Serial.println(inputMessage);
+    request->send(200, "text/html", "HTTP GET request sent to your ESP on input field ("
+                  + inputParam + ") with value: " + inputMessage +
+                  "<br><a href=\"/\">Return to Home Page</a>");
+  });
+  server.onNotFound(notFound);
+  server.begin();
+  pinMode(lamp, OUTPUT);
+  pinMode(buzzer, OUTPUT);
+  pinMode(button_for_IP, INPUT_PULLUP);
+
+  display.display();
+  display.clearDisplay();
+}
+
+void loop()
+{
+  //display.clearDisplay();
+  while (ss.available() > 0)
+    if (gps.encode(ss.read()))
+      displayInfo();
+  if (millis() > 5000 && gps.charsProcessed() < 10)
+  {
+    Serial.println(F("No GPS detected: check wiring."));
+    while (true);
+  }
+
+  while  (Serial2.available() > 0) {
+
+    c = Serial2.read();
+    //    Serial.print(c);
+    if (c == '\n') {
+      break;
+    }
+    else {
+      dataIn += c;
+    }
+  }
+  if (c == '\n') {
+    Parse_the_Data();
+    sendData();
+
+    c = 0;
+    //    delay(4000);
+  }
+
+  h = dht.readHumidity();
+  t = dht.readTemperature();
+  t_Oled = dht.readTemperature();
+  h_Oled = dht.readHumidity();
+
+  if (isnan(h) || isnan(t) )  // Check if any reads failed and exit early (to try again).
+  {
+    Serial.println(F("Failed to read from DHT sensor!"));
+    return;
+  }
+
+  Serial.print(F("Humidity: "));
+  Serial.print(h);
+  Serial.print(F("%  Temperature: "));
+  Serial.print(t);
+  Serial.println(F("°C "));
+
+
+  publishMessage();
+  unsigned long currentMillis = millis();  // Get the current time
+
+  // Check if it's time to perform the action
+  if (currentMillis - previousMillis >= interval) {
+    // Update the previous time to the current time
+    previousMillis = currentMillis;
+    publishMessage1();
+
+    // Your code to run every 5 minutes goes here
+    // For example, you can toggle an LED or perform any other task
+  }
+  client.loop();
+  dataIn = "";
+
+  delay(1000);
+  Serial.print("temp_setpoint");
+  Serial.println(temp_value);
+  Serial.print("humidity_setpoint");
+  Serial.println(humidity_value);
+  bool con1 = false;
+  bool con2 = false;
+  if (temp_value) {
+    setpoint_temp = temp_value.toInt();
+    //    if (t>setpoint_temp){
+    ////      digitalWrite(lamp,HIGH);
+    ////      con1 = true;
+    //    }
+    //    else {
+    ////      digitalWrite(lamp,LOW);
+    ////      con1 = false;
+    //    }
+
+
+  }
+  if (humidity_value) {
+    setpoint_humidity = humidity_value.toInt();
+    //    if (h>setpoint_humidity){
+    ////      con2 = true;
+    ////    }
+    ////    else{
+    ////      con2 = false;
+    //    }
+
+  }
+  if ((t > setpoint_temp && temp_value != "" ) || (h > setpoint_humidity && humidity_value != "") || data1.toInt()>mq135Threshold || data2.toInt()>mq07Threshold
+  || data3.toInt()>mq02Threshold) {
+    digitalWrite(lamp, HIGH);
+    digitalWrite(buzzer, HIGH);
+  }
+  if ((t < setpoint_temp || temp_value == "") && (h < setpoint_humidity || humidity_value == "") && data1.toInt()<mq135Threshold && data2.toInt()<mq07Threshold
+  && data3.toInt()<mq02Threshold) {
+    digitalWrite(lamp, LOW);
+    digitalWrite(buzzer, LOW);
+  }
+
+  unsigned long currentMillis1 = millis();
+  if (currentMillis1 - previousMillis1 >= 5000) {
+    // It's time to do something because the specified interval has passed
+    i++;
+    // Your code to execute at this interval goes here
+
+    previousMillis1 = currentMillis1;  // Save the current time as the previous time for the next iteration
+  }
+
+  if (i == 1) {
+    displayPage01();
+  }
+  if (i == 2) {
+    displayPage02();
+  }
+  if (i == 3) {
+    displayPage03();
+  }
+   if (i == 4) {
+    displayPage04();
+  }
+   if (i == 5) {
+    displayPage05();
+  }
+   if (i == 6) {
+    i = 1;
+  }
+
+  if (digitalRead(button_for_IP) == HIGH) {
+    //run the function
+  }
+}
+
+
+void sendData() {
+
+
+  Serial.print("MQ 135 SENSOR VALUE: ");
+  Serial.println(data1);
+  Serial.print("MQ 07 VALE: ");
+  Serial.println(data2);
+  Serial.print("MQ 02 VALE: ");
+  Serial.println(data3);
+
+  //delay(1000);
+}
+
+void Parse_the_Data() {
+  indexOfA = dataIn.indexOf('A');
+  indexOfB = dataIn.indexOf('B');
+  indexOfC = dataIn.indexOf('C');
+
+
+  data1 = dataIn.substring(0, indexOfA);
+  data2 = dataIn.substring(indexOfA + 1, indexOfB);
+  data3 = dataIn.substring(indexOfB + 1, indexOfC);
+
+}
+
+void displayInfo()
+{
+  Serial.print(F("Location: "));
+  if (gps.location.isValid())
+  {
+    Serial.print(gps.location.lat(), 6);
+    Serial.print(F(","));
+    Serial.print(gps.location.lng(), 6);
+    char buffer1[10];  // Adjust the buffer size as needed
+    dtostrf(gps.location.lat(), 8, 6, buffer1);
+    char buffer2[10];  // Adjust the buffer size as needed
+    dtostrf(gps.location.lng(), 8, 6, buffer2);
+    String s1 = String(buffer1);
+    String s2 = String(buffer2);
+    gpsData = s1 + s2;
+  }
+  else
+  {
+    Serial.print(F("INVALID"));
+    gpsData = "INVALID";
+  }
+  Serial.print(F("  Date/Time: "));
+  if (gps.date.isValid())
+  {
+    Serial.print(gps.date.month());
+    Serial.print(F("/"));
+    Serial.print(gps.date.day());
+    Serial.print(F("/"));
+    Serial.print(gps.date.year());
+  }
+  else
+  {
+    Serial.print(F("INVALID"));
+  }
+  Serial.print(F(" "));
+  if (gps.time.isValid())
+  {
+    if (gps.time.hour() < 10) Serial.print(F("0"));
+    Serial.print(gps.time.hour());
+    Serial.print(F(":"));
+    if (gps.time.minute() < 10) Serial.print(F("0"));
+    Serial.print(gps.time.minute());
+    Serial.print(F(":"));
+    if (gps.time.second() < 10) Serial.print(F("0"));
+    Serial.print(gps.time.second());
+    Serial.print(F("."));
+    if (gps.time.centisecond() < 10) Serial.print(F("0"));
+    Serial.print(gps.time.centisecond());
+  }
+  else
+  {
+    Serial.print(F("INVALID"));
+  }
+  Serial.println();
+}
+
+void showBitmap(void) {
+  display.drawBitmap(0, 2, logo_bmp, bitmap_height, bitmap_width, WHITE);
+  display.display();
+}
+
+void displayPage01() {
+  display.clearDisplay();
+  showBitmap();
+  
+  display.setTextSize(1);
+  display.setFont(&FreeMonoBold18pt7b);
+  display.setTextColor(WHITE);        // Draw white text
+  display.setCursor(45, 32);            // Start at top-left corner
+  display.print(t_Oled);
+  display.drawCircle(92, 12, 3, WHITE);
+  display.setCursor(100, 31);
+  display.print("C");
+  display.setCursor(45, 62);
+  display.print(h_Oled);
+  display.print(" %");
+  display.display();
+}
+
+void displayPage02() {
+  display.clearDisplay();
+  display.setTextColor(WHITE);
+  display.setTextSize(1);
+  display.setFont(NULL);
+  display.setCursor(0, 2);
+  display.println("Server IP");
+  display.println("");
+  display.println(myIP.toString());
+  display.println("");
+  display.println("Please enter IP for");
+  display.println("Setting Value");
+  display.display();
+
+}
+
+void displayPage03() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  //display.setFont(&FreeMonoBold18pt7b);
+  display.setTextColor(WHITE);        // Draw white text
+  display.setCursor(2, 20);            // Start at top-left corner
+  display.println("MQ135 ");
+  display.println("");
+  display.println(data1);
+  display.display();
+
+}
+
+void displayPage04() {
+  //  myIP.toString()
+  display.clearDisplay();
+  display.setTextSize(1);
+  //display.setFont(&FreeMonoBold18pt7b);
+  display.setTextColor(WHITE);        // Draw white text
+  display.setCursor(2, 20);            // Start at top-left corner
+  display.println("MQ 07 ");
+  display.println("");
+  display.println(data2);
+  display.display();
+
+}
+
+void displayPage05() {
+  display.clearDisplay();
+  display.setTextSize(1);
+  //display.setFont(&FreeMonoBold18pt7b);
+  display.setTextColor(WHITE);        // Draw white text
+  display.setCursor(2, 20);            // Start at top-left corner
+  display.println("MQ 02 ");
+  display.println("");
+  display.println(data3);
+  display.display();
+
+}
